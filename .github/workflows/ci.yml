@@ -1,0 +1,32 @@
+# Runs on synthetic logs only: no keys, no network access needed by the tests.
+name: ci
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"   # weekly: catches dependency or runtime changes that break the tool
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install
+      - run: uv sync --locked
+      - run: uv run pytest -q
+        timeout-minutes: 8
+      - name: demo exits 1 when it finds a step
+        run: |
+          # The demo is expected to find steps, so exit code 1 is the pass condition.
+          # GitHub runs steps with bash -e, so the exit code is captured with ||.
+          code=0
+          uv run latency-steps demo --lang en --fail-on-step > /dev/null || code=$?
+          test "$code" -eq 1
