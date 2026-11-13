@@ -25,7 +25,7 @@ latency-steps --version
 ```
 
 ```text
-latency-steps 0.1.0
+latency-steps 0.1.1
 ```
 
 최소 리눅스 이미지에는 `git`, `curl`(과 `ca-certificates`)도 필요합니다. 런타임 의존성은 `duckdb` 하나입니다.
@@ -43,7 +43,7 @@ latency-steps demo --lang ko
 ```text
 *** 연습용 합성 데이터 - 숫자는 일부러 심어 둔 것이며 실제 장애가 아닙니다. ***
 
-지연 계단 보고서 (latency-steps 0.1.0)
+지연 계단 보고서 (latency-steps 0.1.1)
 입력: demo (시드 7, 21일, 시간당 40건) - 20160행 읽음, 20160행 사용, 버린 행 0
 필드: 시각=ts, 지연=duration_ms (ms), 키=tool
 버킷: day (UTC), 최소 행 30, 계단은 3버킷 이상, 변화 x1.2 이상
@@ -75,7 +75,7 @@ latency-steps analyze app.jsonl --key tool --by host --by concurrency:1-3,4-7,8+
 
 | 옵션 | 하는 일 | 예 |
 |---|---|---|
-| `path` | JSONL 또는 CSV 파일, `.gz` / `.zst` 도 가능, `-` 는 표준 입력 | `app.jsonl.gz`, `-` |
+| `path` | JSONL 또는 CSV 파일(Excel 내보내기 같은 BOM 있는 UTF-8 도 가능), `.gz` / `.zst` 도 가능, `-` 는 표준 입력 | `app.jsonl.gz`, `-` |
 | `--ts FIELD` | 시각 필드. 기본: `ts`, `timestamp`, `time` 등 중 처음 발견한 것 | `--ts time` |
 | `--duration FIELD` | 지연 필드. 기본: `duration_ms`, `latency_ms`, `duration` 등 중 처음 발견한 것 | `--duration elapsed` |
 | `--duration-unit ms\|s\|us` | 단위 없는 숫자의 단위(필드 이름에서 추정, 없으면 ms). `12ms`, `1.2s` 같은 값은 적힌 대로 해석 | `--duration-unit s` |
@@ -106,7 +106,7 @@ latency-steps analyze app.jsonl --key tool --by host --only search --lang ko | h
 ```
 
 ```text
-지연 계단 보고서 (latency-steps 0.1.0)
+지연 계단 보고서 (latency-steps 0.1.1)
 입력: app.jsonl - 20162행 읽음, 20160행 사용, 버린 행 2
   버린 이유: 해석 못 한 줄 1, 시각 오류 1
 ```
@@ -216,7 +216,7 @@ flowchart LR
 ## 한계
 
 - 판정은 칸별 표에서 읽어 내는 휴리스틱입니다. 호스트 두 대가 함께 나빠지거나 칸의 표본이 적으면 `inconclusive` 가 나옵니다.
-- 트래픽의 큰 비중에 희석된 저하는 p90 계열로만 잡힙니다. 차원별 탐지(`--detect-by`)는 0.1.0 에 없습니다.
+- 트래픽의 큰 비중에 희석된 저하는 p90 계열로만 잡힙니다. 차원별 탐지(`--detect-by`)는 0.1.1 에 없습니다.
 - 며칠짜리 장애를 시간 버킷으로 보면 오르는 계단과 내리는 계단으로 나뉘어 보입니다. 일 단위 질문에는 `--bucket day` 를 쓰세요.
 - `.zst` 입력은 DuckDB 가 직접 읽는 것에 의존하며 자동 테스트는 없습니다.
 - JSONL 필드 이름 검사는 비어 있지 않은 처음 50줄만 봅니다. 그 뒤에서야 처음 나오는 필드는 없는 것으로 보고되니, 앞쪽에 나오는 필드를 지정하거나 파일 순서를 바꾸세요.
@@ -247,7 +247,7 @@ uv run pytest -q
 ```
 
 ```text
-46 passed
+52 passed
 ```
 
 버그와 제안은 이슈로 남겨 주세요. 변경 기록은 [CHANGELOG.md](CHANGELOG.md).

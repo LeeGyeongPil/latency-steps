@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-13
+
+### Fixed
+- CSV files with a UTF-8 byte order mark (Excel "CSV UTF-8", Windows PowerShell exports) are read correctly; the first column name was not recognised before (plain, `.gz` and standard input).
+
+### Known issues
+- The screenshots `demo-table` and `dropped-rows` still show the version line `0.1.0`; they will be re-taken in a later release.
+- Rows with invalid UTF-8 bytes are not yet counted in the dropped-rows summary.
+
 ## [0.1.0] - 2026-11-12
 
 ### Added

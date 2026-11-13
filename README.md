@@ -25,7 +25,7 @@ latency-steps --version
 ```
 
 ```text
-latency-steps 0.1.0
+latency-steps 0.1.1
 ```
 
 On a minimal Linux image you also need `git` and `curl` (and `ca-certificates`). The only runtime dependency is `duckdb`.
@@ -43,7 +43,7 @@ latency-steps demo --lang en
 ```text
 *** SYNTHETIC PRACTICE DATA - the numbers are planted, not a real incident. ***
 
-Latency step report (latency-steps 0.1.0)
+Latency step report (latency-steps 0.1.1)
 Input: demo (seed 7, 21 days, 40/hour) - 20160 rows read, 20160 kept, dropped rows 0
 Fields: timestamp=ts, duration=duration_ms (ms), key=tool
 Buckets: day (UTC), min rows 30, step lasts 3+ buckets, change x1.2+
@@ -75,7 +75,7 @@ latency-steps analyze app.jsonl --key tool --by host --by concurrency:1-3,4-7,8+
 
 | Option | What it does | Example |
 |---|---|---|
-| `path` | JSONL or CSV file, `.gz` / `.zst` also work, `-` reads standard input | `app.jsonl.gz`, `-` |
+| `path` | JSONL or CSV file (UTF-8 with BOM, e.g. Excel exports, is fine), `.gz` / `.zst` also work, `-` reads standard input | `app.jsonl.gz`, `-` |
 | `--ts FIELD` | Timestamp field. Default: the first of `ts`, `timestamp`, `time`, ... that exists | `--ts time` |
 | `--duration FIELD` | Latency field. Default: the first of `duration_ms`, `latency_ms`, `duration`, ... | `--duration elapsed` |
 | `--duration-unit ms\|s\|us` | Unit of bare numbers (guessed from the field name, else ms). Values like `12ms` or `1.2s` are read as written | `--duration-unit s` |
@@ -106,7 +106,7 @@ latency-steps analyze app.jsonl --key tool --by host --only search --lang en | h
 ```
 
 ```text
-Latency step report (latency-steps 0.1.0)
+Latency step report (latency-steps 0.1.1)
 Input: app.jsonl - 20162 rows read, 20160 kept, dropped rows 2
   dropped: unparseable line 1, bad timestamp 1
 ```
@@ -216,7 +216,7 @@ Ingest and the percentile series run in DuckDB; detection and verdict rules are 
 ## Limits
 
 - Verdicts are heuristics read from cell tables. Two hosts degrading together, or thin cells, give `inconclusive`.
-- A regression diluted across a large share of traffic is only caught through the p90 series. Per-dimension detection (`--detect-by`) is not in 0.1.0.
+- A regression diluted across a large share of traffic is only caught through the p90 series. Per-dimension detection (`--detect-by`) is not in 0.1.1.
 - Hourly buckets of a multi-day outage appear as a step up and a step down; use `--bucket day` for day-level questions.
 - `.zst` input relies on DuckDB reading it and is not covered by an automated test.
 - The field-name check for JSONL looks only at the first 50 non-blank lines, so a field that first appears later in the file is reported as missing; reorder the file or pass names that appear early.
@@ -247,7 +247,7 @@ uv run pytest -q
 ```
 
 ```text
-46 passed
+52 passed
 ```
 
 Bugs and ideas are welcome as issues. Changes are listed in [CHANGELOG.md](CHANGELOG.md).

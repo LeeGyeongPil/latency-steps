@@ -136,3 +136,77 @@ def test_missing_file_and_bad_options(tmp_path):
         con.close()
     with pytest.raises(LatencyStepsError):
         connect("lots")
+
+
+# --- UTF-8 byte order mark (Excel "CSV UTF-8", PowerShell exports) -------------------------
+_BOM = b"\xef\xbb\xbf"
+_BOM_ROWS = [
+    {"ts": "2026-01-01T10:00:00Z", "duration_ms": 12, "tool": "a", "host": "h1"},
+    {"ts": "2026-01-01T10:05:00Z", "duration_ms": 30, "tool": "b", "host": "h2"},
+    {"ts": "2026-01-01T11:00:00Z", "duration_ms": 40, "tool": "a", "host": "h2"},
+]
+
+
+def _csv_bytes(bom: bool) -> bytes:
+    buf = io.StringIO(newline="")
+    writer = csv.DictWriter(buf, fieldnames=list(_BOM_ROWS[0]))
+    writer.writeheader()
+    writer.writerows(_BOM_ROWS)
+    data = buf.getvalue().encode("utf-8")
+    return _BOM + data if bom else data
+
+
+def _jsonl_bytes(bom: bool) -> bytes:
+    data = ("\n".join(json.dumps(r) for r in _BOM_ROWS) + "\n").encode("utf-8")
+    return _BOM + data if bom else data
+
+
+def _load_auto(path, **kwargs):
+    con = connect()
+    try:
+        stats = load_events(con, str(path), key_field="tool", **kwargs)
+        rows = con.execute("SELECT key, lts, ms FROM events ORDER BY key, lts").fetchall()
+    finally:
+        con.close()
+    return stats, rows
+
+
+@pytest.mark.parametrize(
+    "name, gz",
+    [("bom.csv", False), ("bom.csv.gz", True), ("bom.data", False)],
+)
+def test_bom_csv_matches_plain_csv(tmp_path, name, gz):
+    def write(file, bom):
+        data = _csv_bytes(bom)
+        file.write_bytes(gzip.compress(data) if gz else data)
+
+    bom_file, plain_file = tmp_path / name, tmp_path / ("plain_" + name)
+    write(bom_file, True)
+    write(plain_file, False)
+    stats, rows = _load_auto(bom_file)
+    expected_stats, expected_rows = _load_auto(plain_file)
+    assert stats.ts_field == "ts"
+    assert stats.rows_kept == expected_stats.rows_kept == 3
+    assert rows == expected_rows
+
+
+def test_bom_csv_with_explicit_ts_option(tmp_path):
+    path = tmp_path / "bom.csv"
+    path.write_bytes(_csv_bytes(True))
+    stats, _ = _load_auto(path, ts_field="ts")
+    assert stats.ts_field == "ts" and stats.rows_kept == 3
+
+
+def test_bom_jsonl_without_extension_is_detected_as_jsonl(tmp_path):
+    path = tmp_path / "bom.data"
+    path.write_bytes(_jsonl_bytes(True))
+    stats, rows = _load_auto(path)
+    assert stats.rows_kept == 3 and len(rows) == 3
+
+
+def test_bom_csv_from_stdin(tmp_path, capsys, monkeypatch):
+    from latency_steps.cli import main
+
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(_csv_bytes(True))))
+    assert main(["analyze", "-", "--key", "tool", "--format", "json", "--lang", "en"]) == 0
+    assert '"rows_kept": 3' in capsys.readouterr().out.replace('":3', '": 3')

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "latency-steps"
-version = "0.1.0"
+version = "0.1.1"
 description = "Find when latency stepped up in raw event logs, then see whether it is one host, a load-mix shift, or everything."
 readme = "README.md"
 requires-python = ">=3.11"

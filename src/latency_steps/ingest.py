@@ -102,7 +102,7 @@ def _peek_text(path: Path, lines: int) -> list[str]:
     """First ``lines`` text lines of a possibly compressed file (gzip handled directly)."""
     try:
         if path.name.lower().endswith(".gz"):
-            with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+            with gzip.open(path, "rt", encoding="utf-8-sig", errors="replace") as f:
                 return [next(f, "") for _ in range(lines)]
         if path.name.lower().endswith(".zst"):
             con = duckdb.connect(":memory:")
@@ -115,7 +115,7 @@ def _peek_text(path: Path, lines: int) -> list[str]:
             finally:
                 con.close()
             return [r[0] for r in rows]
-        with open(path, encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
             return [next(f, "") for _ in range(lines)]
     except (OSError, duckdb.Error):
         return []
