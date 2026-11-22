@@ -161,6 +161,33 @@ def _unit_from_name(field_name: str) -> str | None:
     return None
 
 
+def _first_line(exc: Exception) -> str:
+    first = (str(exc).strip().splitlines() or [type(exc).__name__])[0]
+    # The message templates add their own full stop; avoid "..".
+    return first.rstrip(". ")
+
+
+def _drop_rejects(con: duckdb.DuckDBPyConnection) -> None:
+    con.execute("DROP TABLE IF EXISTS reject_errors")
+    con.execute("DROP TABLE IF EXISTS reject_scans")
+
+
+def _count_rejects(con: duckdb.DuckDBPyConnection) -> tuple[int, int]:
+    """Return ``(invalid UTF-8 lines, other rejected lines)`` and clean up the reject tables."""
+    try:
+        # One line can have several reject rows; count lines, and let encoding win.
+        row = con.execute(
+            "SELECT count(*) FILTER (WHERE enc), count(*) FILTER (WHERE NOT enc) FROM ("
+            "SELECT bool_or(error_type = 'INVALID ENCODING') AS enc FROM reject_errors "
+            "GROUP BY scan_id, file_id, line)"
+        ).fetchone()
+    except duckdb.Error as exc:
+        raise LatencyStepsError("read_failed", detail=_first_line(exc)) from exc
+    finally:
+        _drop_rejects(con)
+    return int(row[0]), int(row[1])
+
+
 def load_events(
     con: duckdb.DuckDBPyConnection,
     path: str,
@@ -207,7 +234,8 @@ def load_events(
             source = (
                 "SELECT CASE WHEN json_valid(raw) THEN raw END AS l, json_valid(raw) AS ok "
                 "FROM read_csv(?, header=false, columns={'raw':'VARCHAR'}, delim='\x1f', "
-                "quote='', escape='', auto_detect=false) WHERE length(trim(raw)) > 0"
+                "quote='', escape='', auto_detect=false, ignore_errors=true, store_rejects=true) "
+                "WHERE length(trim(raw)) > 0"
             )
         else:
             def col(name: str) -> str:
@@ -219,8 +247,8 @@ def load_events(
         key_expr = f"coalesce(nullif({col(key_field)}, ''), '(none)')" if key_field else "'all'"
         default_factor = UNIT_FACTORS[unit]
         con.execute("DROP TABLE IF EXISTS raw_events")
-        con.execute(
-            f"""
+        _drop_rejects(con)
+        create_sql = f"""
             CREATE TABLE raw_events AS
             SELECT ok,
                    {key_expr} AS key,
@@ -228,9 +256,14 @@ def load_events(
                    {col(dur_name)} AS dur_text
                    {by_cols}
             FROM ({source})
-            """,
-            [str(file)],
-        )
+            """
+        try:
+            con.execute(create_sql, [str(file)])
+        except duckdb.Error as exc:
+            _drop_rejects(con)
+            raise LatencyStepsError("read_failed", detail=_first_line(exc)) from exc
+        # Lines DuckDB could not decode were skipped by ``ignore_errors``; count them here.
+        bad_utf8, bad_other = _count_rejects(con) if fmt == "jsonl" else (0, 0)
 
     num = f"regexp_extract(dur_text, '{_NUMBER_WITH_UNIT}', 1)"
     suffix = f"lower(regexp_extract(dur_text, '{_NUMBER_WITH_UNIT}', 2))"
@@ -268,10 +301,14 @@ def load_events(
     con.execute("DELETE FROM events WHERE NOT ok OR lts IS NULL OR ms IS NULL OR ms < 0")
     kept = con.execute("SELECT count(*) FROM events").fetchone()[0]
     con.execute("DROP TABLE raw_events")
+    total += bad_utf8 + bad_other
+    bad_json += bad_other
 
     dropped = {}
     if bad_json:
         dropped["invalid_record"] = bad_json
+    if bad_utf8:
+        dropped["invalid_utf8"] = bad_utf8
     if bad_ts:
         dropped["bad_timestamp"] = bad_ts
     if bad_dur:

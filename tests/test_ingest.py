@@ -210,3 +210,115 @@ def test_bom_csv_from_stdin(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(_csv_bytes(True))))
     assert main(["analyze", "-", "--key", "tool", "--format", "json", "--lang", "en"]) == 0
     assert '"rows_kept": 3' in capsys.readouterr().out.replace('":3', '": 3')
+
+
+def _utf8_lines(extra_bad: int = 1) -> bytes:
+    good = [json.dumps(r) for r in CLEAN_ROWS if r["time"] != "not-a-time"]
+    bad = b'{"time": "2026-01-01T13:00:00Z", "took": 5, "route": "ch\xff\xfe", "host": "h1"}'
+    return ("\n".join(good) + "\n").encode() + (bad + b"\n") * extra_bad
+
+
+@pytest.mark.parametrize("mode", ["plain", "gz", "stdin"])
+def test_invalid_utf8_line_is_dropped_and_counted(tmp_path, monkeypatch, mode):
+    data = _utf8_lines(2)
+    if mode == "plain":
+        target = tmp_path / "bad.jsonl"
+        target.write_bytes(data)
+        path = str(target)
+    elif mode == "gz":
+        target = tmp_path / "bad.jsonl.gz"
+        target.write_bytes(gzip.compress(data))
+        path = str(target)
+    else:
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(data)))
+        path = "-"
+    stats, rows = _load(path)
+    assert stats.dropped == {"bad_duration": 1, "invalid_utf8": 2}
+    assert stats.rows_read == 7 and stats.rows_kept == 4
+    assert len(rows) == 4
+
+
+def test_invalid_utf8_reason_is_localized():
+    from latency_steps.i18n import MESSAGES
+
+    for lang in ("en", "ko"):
+        assert "{n}" in MESSAGES[lang]["r.drop.invalid_utf8"]
+
+
+def test_mixed_invalid_line_is_counted_once(tmp_path):
+    # One line with invalid UTF-8 and a raw 0x1F byte yields two DuckDB reject rows.
+    good = _utf8_lines(0)
+    bad = b'{"time": "2026-01-01T13:00:00Z", "took": 5, "route": "\xff\x1f\xfe"}\n'
+    target = tmp_path / "mixed.jsonl"
+    target.write_bytes(good + bad)
+    stats, rows = _load(str(target))
+    assert stats.rows_read == 6 and len(rows) == 4
+    assert stats.dropped == {"bad_duration": 1, "invalid_utf8": 1}
+
+
+def test_non_encoding_rejects_are_counted_as_unparseable(tmp_path):
+    # A raw 0x1F byte (without bad UTF-8) is a rejected line: counted, not a crash.
+    target = tmp_path / "ctl.jsonl"
+    target.write_bytes(_utf8_lines(0) + b'{"time": "x", "took": 5, "route": "a\x1fb"}\n')
+    stats, rows = _load(str(target))
+    assert stats.rows_read == 6 and len(rows) == 4
+    assert stats.dropped == {"bad_duration": 1, "invalid_record": 1}
+
+
+def test_mixed_line_endings_is_a_localized_error(tmp_path):
+    from latency_steps.cli import main
+
+    target = tmp_path / "crlf.jsonl"
+    data = _utf8_lines(0).replace(b"\n", b"\r", 1)
+    target.write_bytes(data)
+    con = connect()
+    try:
+        try:
+            load_events(con, str(target), **FIELDS)
+        except LatencyStepsError as exc:
+            assert exc.code == "read_failed"
+        else:  # pragma: no cover - DuckDB version without the error
+            pytest.skip("this DuckDB version reads the file")
+    finally:
+        con.close()
+    assert main(["analyze", str(target), "--format", "json", "--lang", "en"]) == 2
+
+
+def test_csv_read_error_is_a_localized_error(tmp_path, capsys):
+    from latency_steps.cli import main
+
+    target = tmp_path / "mixed.csv"
+    target.write_bytes(
+        b"time,took,route\r2026-01-01T13:00:00Z,5,a\n2026-01-01T13:00:01Z,5,a\r\n"
+    )
+    for lang in ("en", "ko"):
+        assert main(["analyze", str(target), "--format", "json", "--lang", lang]) == 2
+        err = capsys.readouterr().err
+        assert ".." not in err and "Traceback" not in err
+        assert ("could not read the input" if lang == "en" else "입력을 읽을 수 없습니다") in err
+
+
+def test_read_failed_message_has_no_double_full_stop(tmp_path, capsys):
+    from latency_steps.cli import main
+
+    target = tmp_path / "crlf.jsonl"
+    target.write_bytes(_utf8_lines(0).replace(b"\n", b"\r", 1))
+    for lang in ("en", "ko"):
+        main(["analyze", str(target), "--format", "json", "--lang", lang])
+        assert ".." not in capsys.readouterr().err
+
+
+def test_read_failed_message_exists_in_both_languages():
+    from latency_steps.i18n import MESSAGES
+
+    for lang in ("en", "ko"):
+        assert "{detail}" in MESSAGES[lang]["err.read_failed"]
+
+
+def test_overlong_line_is_counted_as_unparseable(tmp_path):
+    big = b'{"time": "2026-01-01T13:00:00Z", "took": 5, "route": "' + b"a" * (3 * 1024 * 1024) + b'"}\n'
+    target = tmp_path / "big.jsonl"
+    target.write_bytes(_utf8_lines(0) + big)
+    stats, rows = _load(str(target))
+    assert stats.rows_read == 6 and len(rows) == 4
+    assert stats.dropped == {"bad_duration": 1, "invalid_record": 1}

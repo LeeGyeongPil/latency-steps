@@ -97,7 +97,7 @@ latency-steps analyze app.jsonl --key tool --by host --by concurrency:1-3,4-7,8+
 
 ### Messy logs are reported, not fatal
 
-Broken lines, unparseable timestamps and values like `"12ms"` do not stop the run. Values are read as text and converted tolerantly; rows that cannot be interpreted are counted and shown. Here two bad lines were appended to a saved demo log:
+Broken lines, unparseable timestamps and values like `"12ms"` do not stop the run. Values are read as text and converted tolerantly; rows that cannot be interpreted are counted and shown. One exception: CSV rows with invalid UTF-8 bytes are still skipped without being counted (see [Limits](#limits)). Here two bad lines were appended to a saved demo log:
 
 ```bash
 latency-steps demo --save app.jsonl > /dev/null
@@ -112,7 +112,7 @@ Input: app.jsonl - 20162 rows read, 20160 kept, dropped rows 2
 ```
 
 ![Terminal output showing dropped rows and why](docs/images/dropped-rows.png)
-*Rows that could not be used are counted with a reason instead of silently vanishing.*
+*Rows that could not be used are counted with a reason. The exception is CSV rows with invalid UTF-8 bytes, which are not counted yet (see [Limits](#limits)).*
 
 ## How it decides
 
@@ -218,6 +218,7 @@ Ingest and the percentile series run in DuckDB; detection and verdict rules are 
 - Verdicts are heuristics read from cell tables. Two hosts degrading together, or thin cells, give `inconclusive`.
 - A regression diluted across a large share of traffic is only caught through the p90 series. Per-dimension detection (`--detect-by`) is not in 0.1.1.
 - Hourly buckets of a multi-day outage appear as a step up and a step down; use `--bucket day` for day-level questions.
+- CSV rows with invalid UTF-8 bytes in a column the analysis uses are skipped without being counted in the dropped-rows summary, so `rows read` is lower than the real row count and no reason is shown. JSONL lines with invalid UTF-8 are counted as `invalid UTF-8`. Convert a CSV to UTF-8 first if it may contain other encodings.
 - `.zst` input relies on DuckDB reading it and is not covered by an automated test.
 - The field-name check for JSONL looks only at the first 50 non-blank lines, so a field that first appears later in the file is reported as missing; reorder the file or pass names that appear early.
 - It answers "when" and "where", not "why". Pair the result with your deploy and config history.
@@ -235,6 +236,7 @@ Ingest and the percentile series run in DuckDB; detection and verdict rules are 
 | `error: input file not found` and exit code 2 | Wrong path | Check the path, or pass `-` to read standard input |
 | `error: could not find the nosuch field. Fields seen: ts, duration_ms, ...` and exit code 2 | A `--key`, `--by`, `--ts` or `--duration` name does not exist in the file (checked in the first 50 non-blank lines of JSONL, and in the CSV header) | Use one of the names listed after `Fields seen:` |
 | `error: the file is empty: no non-blank lines found.` and exit code 2 | The file has no content, for example a log rotation just happened | Point to the right file |
+| `error: could not read the input: ...` and exit code 2 | DuckDB cannot read the file at all, for example mixed line endings or corrupt data (JSONL lines with invalid UTF-8 are not this error; they are counted as dropped rows. CSV rows with invalid UTF-8 are skipped without being counted, see [Limits](#limits)) | Normalise the line endings or repair the file |
 | No findings on a log you know regressed | Too few rows per bucket, or the step is shorter than `--min-run` buckets | Lower `--min-n`, use `--bucket hour`, or lower `--min-run` |
 | Many "dropped rows" | The timestamp or duration field was picked wrongly | Pass `--ts` and `--duration` explicitly; see the `dropped:` reason line |
 | Verdict `inconclusive` | Cells too thin or two cells moved together | Read the cell tables, add a better `--by` dimension |
@@ -247,7 +249,7 @@ uv run pytest -q
 ```
 
 ```text
-52 passed
+63 passed
 ```
 
 Bugs and ideas are welcome as issues. Changes are listed in [CHANGELOG.md](CHANGELOG.md).

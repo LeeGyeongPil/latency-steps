@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-23
+
+### Fixed
+- JSONL lines with invalid UTF-8 bytes (plain, `.gz` and standard input) no longer abort the run with a traceback and exit code 1. They are counted as dropped rows with the reason `invalid UTF-8` and the remaining rows are analysed as before. Each bad line is counted once.
+- JSONL lines the reader rejects for other reasons (a raw `0x1F` byte, a line over the 2 MB line limit) are now counted as `unparseable line` instead of aborting with a traceback.
+- Input DuckDB cannot read at all (for example mixed line endings) now ends with a one-line localized error and exit code 2 instead of a traceback and exit code 1.
+
+### Known issues
+- CSV rows with invalid UTF-8 bytes are still skipped without being counted in the dropped-rows summary (JSONL is fixed, see above).
+
 ## [0.1.1] - 2026-11-13
 
 ### Fixed
