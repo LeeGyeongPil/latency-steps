@@ -25,7 +25,7 @@ latency-steps --version
 ```
 
 ```text
-latency-steps 0.1.3
+latency-steps 0.2.0
 ```
 
 최소 리눅스 이미지에는 `git`, `curl`(과 `ca-certificates`)도 필요합니다. 런타임 의존성은 `duckdb` 하나입니다.
@@ -43,7 +43,7 @@ latency-steps demo --lang ko
 ```text
 *** 연습용 합성 데이터 - 숫자는 일부러 심어 둔 것이며 실제 장애가 아닙니다. ***
 
-지연 계단 보고서 (latency-steps 0.1.3)
+지연 계단 보고서 (latency-steps 0.2.0)
 입력: demo (시드 7, 21일, 시간당 40건) - 20160행 읽음, 20160행 사용, 버린 행 0
 필드: 시각=ts, 지연=duration_ms (ms), 키=tool
 버킷: day (UTC), 최소 행 30, 계단은 3버킷 이상, 변화 x1.2 이상
@@ -75,7 +75,7 @@ latency-steps analyze app.jsonl --key tool --by host --by concurrency:1-3,4-7,8+
 
 | 옵션 | 하는 일 | 예 |
 |---|---|---|
-| `path` | JSONL 또는 CSV 파일(Excel 내보내기 같은 BOM 있는 UTF-8 도 가능), `.gz` / `.zst` 도 가능, `-` 는 표준 입력 | `app.jsonl.gz`, `-` |
+| `path` | JSONL 또는 CSV 파일(쉼표·세미콜론·탭·파이프 구분, Excel 내보내기 같은 BOM 있는 UTF-8 도 가능, 소요 시간은 소수점이 점이어야 함), `.gz` / `.zst` 도 가능, `-` 는 표준 입력 | `app.jsonl.gz`, `-` |
 | `--ts FIELD` | 시각 필드. 기본: `ts`, `timestamp`, `time` 등 중 처음 발견한 것 | `--ts time` |
 | `--duration FIELD` | 지연 필드. 기본: `duration_ms`, `latency_ms`, `duration` 등 중 처음 발견한 것 | `--duration elapsed` |
 | `--duration-unit ms\|s\|us` | 단위 없는 숫자의 단위(필드 이름에서 추정, 없으면 ms). `12ms`, `1.2s` 같은 값은 적힌 대로 해석 | `--duration-unit s` |
@@ -106,7 +106,7 @@ latency-steps analyze app.jsonl --key tool --by host --only search --lang ko | h
 ```
 
 ```text
-지연 계단 보고서 (latency-steps 0.1.3)
+지연 계단 보고서 (latency-steps 0.2.0)
 입력: app.jsonl - 20162행 읽음, 20160행 사용, 버린 행 2
   버린 이유: 해석 못 한 줄 1, 시각 오류 1
 ```
@@ -216,7 +216,7 @@ flowchart LR
 ## 한계
 
 - 판정은 칸별 표에서 읽어 내는 휴리스틱입니다. 호스트 두 대가 함께 나빠지거나 칸의 표본이 적으면 `inconclusive` 가 나옵니다.
-- 트래픽의 큰 비중에 희석된 저하는 p90 계열로만 잡힙니다. 차원별 탐지(`--detect-by`)는 0.1.3 에 없습니다.
+- 트래픽의 큰 비중에 희석된 저하는 p90 계열로만 잡힙니다. 차원별 탐지(`--detect-by`)는 0.2.0 에 없습니다.
 - 며칠짜리 장애를 시간 버킷으로 보면 오르는 계단과 내리는 계단으로 나뉘어 보입니다. 일 단위 질문에는 `--bucket day` 를 쓰세요.
 - CSV 행과 JSONL 줄에서 UTF-8 이 잘못된 것은 분석하지 않고 버린 행 요약에 `UTF-8 오류` 로 셉니다. 다른 인코딩이 섞였을 수 있는 CSV 는 먼저 UTF-8 로 변환하세요.
 - `.zst` 입력은 DuckDB 가 직접 읽는 것에 의존하며 자동 테스트는 없습니다.
