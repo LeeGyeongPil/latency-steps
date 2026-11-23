@@ -322,3 +322,31 @@ def test_overlong_line_is_counted_as_unparseable(tmp_path):
     stats, rows = _load(str(target))
     assert stats.rows_read == 6 and len(rows) == 4
     assert stats.dropped == {"bad_duration": 1, "invalid_record": 1}
+
+
+def _csv_text_rows(n: int, latin1_every: int = 0) -> bytes:
+    lines = ["time,took,route,host"]
+    for i in range(n):
+        host = "hé1" if latin1_every and i % latin1_every == 0 else "h2"
+        lines.append(f"2026-01-01T10:{i // 60:02d}:{i % 60:02d}Z,{100 + i % 7},a,{host}")
+    return ("\n".join(lines) + "\n").encode("latin-1")
+
+
+def test_csv_latin1_rows_are_counted_as_invalid_utf8(tmp_path):
+    # 2999 rows, every 4th host holds a Latin-1 "é" (0xE9): 750 bad rows.
+    target = tmp_path / "latin1.csv"
+    target.write_bytes(_csv_text_rows(2999, latin1_every=4))
+    stats, rows = _load(str(target))
+    bad = len(range(0, 2999, 4))
+    assert stats.dropped == {"invalid_utf8": bad}
+    assert stats.rows_read == 2999 and stats.rows_kept == 2999 - bad
+    assert len(rows) == 2999 - bad
+
+
+def test_csv_last_line_with_invalid_byte_is_counted(tmp_path):
+    data = _csv_text_rows(40) + b"2026-01-01T11:00:00Z,5,ch\xffat,h2\n"
+    target = tmp_path / "last.csv"
+    target.write_bytes(data)
+    stats, rows = _load(str(target))
+    assert stats.dropped == {"invalid_utf8": 1}
+    assert stats.rows_read == 41 and stats.rows_kept == 40

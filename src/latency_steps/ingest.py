@@ -241,7 +241,7 @@ def load_events(
             def col(name: str) -> str:
                 return _quote_ident(name) + "::VARCHAR"
 
-            source = "SELECT *, true AS ok FROM read_csv(?, header=true, all_varchar=true, ignore_errors=true, null_padding=true)"
+            source = "SELECT *, true AS ok FROM read_csv(?, header=true, all_varchar=true, ignore_errors=true, null_padding=true, store_rejects=true)"
 
         by_cols = "".join(f", {col(f)} AS d{i}" for i, f in enumerate(by_fields))
         key_expr = f"coalesce(nullif({col(key_field)}, ''), '(none)')" if key_field else "'all'"
@@ -263,7 +263,7 @@ def load_events(
             _drop_rejects(con)
             raise LatencyStepsError("read_failed", detail=_first_line(exc)) from exc
         # Lines DuckDB could not decode were skipped by ``ignore_errors``; count them here.
-        bad_utf8, bad_other = _count_rejects(con) if fmt == "jsonl" else (0, 0)
+        bad_utf8, bad_other = _count_rejects(con)
 
     num = f"regexp_extract(dur_text, '{_NUMBER_WITH_UNIT}', 1)"
     suffix = f"lower(regexp_extract(dur_text, '{_NUMBER_WITH_UNIT}', 2))"
