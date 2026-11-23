@@ -121,6 +121,16 @@ def _peek_text(path: Path, lines: int) -> list[str]:
         return []
 
 
+def _header_delimiter(header: str) -> str:
+    """Delimiter of a CSV header line: comma first, else ';', tab or '|', else comma."""
+    if "," in header:
+        return ","
+    for candidate in (";", "\t", "|"):
+        if candidate in header:
+            return candidate
+    return ","
+
+
 def _guess_fields(path: Path, fmt: str) -> list[str]:
     """Field names seen in the first lines (union of keys / CSV header)."""
     import csv
@@ -128,7 +138,8 @@ def _guess_fields(path: Path, fmt: str) -> list[str]:
 
     lines = [ln for ln in _peek_text(path, 50) if ln.strip()]
     if fmt == "csv":
-        return next(csv.reader(lines[:1]), [])
+        header = lines[:1]
+        return next(csv.reader(header, delimiter=_header_delimiter(header[0] if header else "")), [])
     names: dict[str, None] = {}
     for ln in lines:
         try:

@@ -350,3 +350,18 @@ def test_csv_last_line_with_invalid_byte_is_counted(tmp_path):
     stats, rows = _load(str(target))
     assert stats.dropped == {"invalid_utf8": 1}
     assert stats.rows_read == 41 and stats.rows_kept == 40
+
+
+@pytest.mark.parametrize("delim, name", [(",", "d.csv"), (";", "d_semi.csv"), ("\t", "d.tsv"), ("|", "d_pipe.csv")])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_delimited_files_match_comma_csv(tmp_path, delim, name, explicit):
+    path = tmp_path / name
+    lines = [delim.join([r["ts"], str(r["duration_ms"]), r["tool"]]) for r in _BOM_ROWS]
+    path.write_text(delim.join(["ts", "duration_ms", "tool"]) + "\n" + "\n".join(lines) + "\n")
+    kwargs = {"ts_field": "ts", "duration_field": "duration_ms"} if explicit else {}
+    stats, rows = _load_auto(path, **kwargs)
+    ref = tmp_path / "ref.csv"
+    ref.write_bytes(_csv_bytes(False))
+    _, expected = _load_auto(ref)
+    assert stats.ts_field == "ts" and stats.rows_kept == 3
+    assert rows == expected
